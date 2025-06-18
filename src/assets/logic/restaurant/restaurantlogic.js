@@ -157,7 +157,7 @@ export function updateRestaurantAgents(agents, delta, scene) {
       const dx = target.x - mesh.position.x;
       const dz = target.z - mesh.position.z;
       const dist = Math.sqrt(dx*dx + dz*dz);
-      const speed = 2.2; // units/sec
+      const speed = 5.0; // units/sec
       if (dist > 0.05) {
         mesh.position.x += (dx/dist) * speed * delta;
         mesh.position.z += (dz/dist) * speed * delta;
