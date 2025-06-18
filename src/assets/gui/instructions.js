@@ -14,6 +14,7 @@ export const INSTRUCTIONS_HTML = `
       <li><b>Restaurant Logic:</b> Customers always enter through the front entrance, walk to their table (never through walls), and are seated. Workers have roles (host, waiter, busser, cook), and each customer has an order.</li>
       <li><b>Restaurant Agent Colors:</b> <span style="color:#1976d2;">Host</span>, <span style="color:#43a047;">Waiter</span>, <span style="color:#ffb300;">Busser</span>, <span style="color:#d32f2f;">Cook</span>, <span style="color:#4caf50;">Customer</span></li>
       <li><b>Press <kbd>i</kbd></b> – Show/hide this info panel</li>
+      <li><b>Analytics Dashboard:</b> Click <b>Generate Report</b> (top right, restaurant scene) to open a live analytics panel with a large (1140x660) interactive chart. Upload a .json report to visualize session analytics. The panel is resizable for easier viewing and analysis.</li>
     </ul>
     <p style="color:#888;font-size:0.95em;">Project: Modular, interactive 3D grocery store and restaurant simulation with realistic agent behaviors, stats, and UI. Built with Vite + Three.js.</p>
   </div>
