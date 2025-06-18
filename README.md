@@ -23,9 +23,22 @@ A modular, interactive 3D simulation built with Vite and Three.js. Simulates cus
 - 🖥️ **Real-time overlays:** Interactive stats card (click a customer to view details)
 - 🧩 **Modular codebase:** Logic, agents, maps, GUI, assets, separated for grocery and restaurant
 - 🏆 **Restaurant stats overlay:** Lists table numbers and customer numbers for easy occupancy tracking
-- 📦 **Downloadable session analytics:** Click "Download Report" to save a .json summary of the day (revenue, table stats, capacity, etc.)
+- 😃 **Customer mood logic:** Each restaurant customer tracks their mood, which decays slowly and is affected by service speed. Mood, tip, and service quality are logged for analytics.
+- 📦 **Downloadable session analytics:** Click "Download Report" to save a .json summary of the day, including:
+  - Revenue, table stats, and capacity
+  - Detailed customer info (mood, tip, wait time, service quality, time seated, time eating)
+  - Worker stats (waiters, avg. orders handled, avg. time per table)
+  - Mood breakdown, wasted orders, bottleneck alerts
+  - Visualization-ready for BI tools
 - 🌐 **Local network deployment:** Access the simulation from any device on your WiFi
 - 🍽️ **Default scene:** Restaurant is now the default on load
+- 🍽️ **Restaurant Agent Color Legend**
+
+  - <span style="color:#1976d2;font-weight:bold;">Host</span>: Blue
+  - <span style="color:#43a047;font-weight:bold;">Waiter</span>: Green
+  - <span style="color:#ffb300;font-weight:bold;">Busser</span>: Yellow
+  - <span style="color:#d32f2f;font-weight:bold;">Cook</span>: Red
+  - <span style="color:#4caf50;font-weight:bold;">Customer</span>: Light Green
 
 ## 🗂️ Project Structure
 ```
@@ -43,10 +56,10 @@ bizsim/
   │   │   ├── maps/
   │   │   │   ├── grocery/      # Grocery store layout and fixtures
   │   │   │   └── restaurant/   # Restaurant layout and fixtures
-  │   ├── main.js       # Main entry point
-  │   └── style.css     # Styles
-  ├── logs/             # Progress and session logs
-  ├── index.html        # App entry
+  │   │   ├── main.js       # Main entry point
+  │   │   └── style.css     # Styles
+  │   ├── logs/             # Progress and session logs
+  │   └── index.html        # App entry
   └── package.json      # Dependencies
 ```
 
@@ -62,7 +75,37 @@ bizsim/
 3. Open [http://localhost:5173](http://localhost:5173) or the Network URL (e.g., `http://{your_ip}:5173/`) on any device on your WiFi.
 
 ## 📥 Downloading Analytics
-- After a restaurant session, click the **Download Report** button below the scene dropdown to save a `.json` file with revenue, table stats, and capacity analytics.
+- After a restaurant session, click the **Download Report** button below the scene dropdown to save a `.json` file with:
+  - Revenue, table stats, and capacity
+  - Detailed `customers` array (order, mood, tip, wait time, service quality, time seated, time eating)
+  - Worker stats, mood breakdown, wasted orders, bottleneck alerts
+  - Visualization-ready for BI tools
+
+### 📊 Example Log Structure
+```json
+{
+  "avgTimeSeated": 280,
+  "avgWaitTime": 75,
+  "avgConsumptionTime": 180,
+  "avgTip": 3.5,
+  "moodBreakdown": {
+    "happy": 14,
+    "neutral": 4,
+    "frustrated": 1
+  },
+  "wastedOrders": 2,
+  "workerStats": {
+    "waiters": 2,
+    "avgOrdersHandled": 8,
+    "avgTimePerTable": 160
+  },
+  "alerts": [
+    "Table 3 had a delayed delivery (Customer #12)",
+    "Table 2 had a delayed delivery (Customer #7)"
+  ],
+  ...
+}
+```
 
 ## 📝 Next Steps
 - 🛒 Implement item pickup and basket return
@@ -76,4 +119,3 @@ bizsim/
 
 ---
 _Last updated: after modularization, restaurant sim, unified UI, analytics download, and WiFi deployment milestone_ 🍽️📊🌐
-
