@@ -33,12 +33,26 @@ Milestones Completed:
 28. 📦 Downloadable session analytics: "Download Report" button saves a .json summary of the day (revenue, table stats, capacity, etc.)
 29. 🌐 Local network deployment: run with `npx vite --host` and access from any device on your WiFi
 30. 🍽️ Default scene is now Restaurant for quick demo and analytics
+31. 😃 Customer mood logic: Each restaurant customer tracks mood, which decays slowly and is affected by service speed. Mood and service quality are logged for analytics.
+32. 📊 Session logs now include a detailed 'customers' array with order, mood, wait time, and service quality for each customer.
+33. 🚀 Deployed to Netlify: The simulation is now live and accessible online for easy sharing and demoing.
+    - URL: https://bizsim.netlify.app/
+34. 📊 Phase 3 Analytics: Session logs now include customer timing stats (avgTimeSeated, avgWaitTime, avgConsumptionTime), mood/tip analytics, worker stats, wasted orders, bottleneck alerts, and are ready for visualization.
+35. 🚪 Improved Restaurant Entrance: Customers now always enter through the front entrance and follow waypoints to their table, never walking through walls.
+36. 🟢 All Bugs Fixed: Entry/exit logic, agent speed, and wall-walking issues are fully resolved. Simulation is robust and polished.
+37. 📊 Interactive Analytics Dashboard: Live charts (Chart.js), uploadable .json reports, and a resizable analytics window for restaurant analytics. The main chart is now 3x larger (1140x660) for easier viewing and analysis.
 
 Current State:
+- The simulation is live on Netlify and accessible from anywhere 🌍
+- Restaurant customers now always enter through the front entrance and follow waypoints to their table, never walking through walls.
+- Phase 3 analytics: Downloadable logs now include customer timing, mood/tip, worker stats, wasted orders, bottleneck alerts, and are ready for BI visualization.
 - Both grocery and restaurant simulations are fully modular, with clear separation of logic, maps, and GUI overlays.
 - Unified UI and stats overlays adapt to the current scene.
 - Codebase is organized for future expansion and maintainability.
-- Analytics and session logs are easily downloadable for business intelligence and charting.
+- Analytics and session logs are easily downloadable for business intelligence and charting, including detailed customer mood and service quality analytics.
+- All major bugs are fixed: agent movement, entry/exit, and speed are now robust and reliable. Simulation is polished and ready for further features or deployment.
+- Interactive analytics dashboard: live charts, uploadable reports, and a resizable analytics window for restaurant analytics.
+- The analytics dashboard chart is now 3x larger (1140x660), making analytics easier to view and analyze. The panel is resizable and the chart is interactive and visualization-ready.
 
 Pending/Next Steps:
 - 🛒 Implement item pickup and basket return logic.
@@ -46,7 +60,6 @@ Pending/Next Steps:
 - 🖼️ Visual improvements: 3D models for agents, shelves, counters, and items.
 - 🧑‍💻 UI/UX enhancements for stats and controls.
 - 🚀 Performance optimization for larger agent counts.
-- 🌍 Prepare for deployment (Netlify, asset optimization).
 - 🔊 Add sound effects or background music for immersion.
 - 💾 Save/load simulation state or session logs.
 
