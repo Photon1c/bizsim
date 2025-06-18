@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HOST_POS, KITCHEN_POS, TABLE_POSITIONS } from '../../maps/restaurant/restaurantmap.js';
+import { HOST_POS, KITCHEN_POS, TABLE_POSITIONS, ENTRANCE_POS } from '../../maps/restaurant/restaurantmap.js';
 import { assignOrders } from './orderlogic.js';
 
 // Colors for roles
@@ -35,21 +35,39 @@ export function seatGroup(scene, agents, groupSize, onSeatCustomer) {
     const seatAngle = (Math.PI/2) * i;
     const seatX = table.x + Math.cos(seatAngle) * 1.5;
     const seatZ = table.z + Math.sin(seatAngle) * 1.5;
-    // Start at entrance
-    mesh.position.set(0, 0.5, 15); // ENTRANCE_POS
+    // Place mesh at entrance gap and add to scene
+    mesh.position.set(0, 0.5, 16);
     scene.add(mesh);
+    // Add waypoints: entrance gap (z=16) -> just inside (z=12) -> seat
+    const waypoints = [
+      { x: 0, y: 0.5, z: 16 }, // entrance gap in wall
+      { x: 0, y: 0.5, z: HOST_POS.z }, // just inside entrance
+      { x: seatX, y: 0.5, z: seatZ }
+    ];
     const customer = {
       mesh,
       table,
       seat: i,
       group: table,
-      state: 'walking', // 'walking' or 'seated'
+      state: 'walking', // 'walking', 'seated'
       hasOrdered: false,
       hasEaten: false,
       orderState: 'placed',
       orderProgress: 0,
       consumptionProgress: 0,
-      target: { x: seatX, y: 0.5, z: seatZ }
+      waypoints,
+      waypointIndex: 0,
+      target: waypoints[0],
+      mood: 100,
+      waitStartTime: Date.now(),
+      servedTime: null,
+      waitDuration: null,
+      serviceQuality: null, // 'good', 'ok', 'bad'
+      tip: null, // mood-based tip
+      timeSeated: Date.now(),
+      timeFinished: null,
+      consumptionTime: null,
+      bottleneck: false // flag for bottleneck alerts
     };
     agents.customers.push(customer);
     table.group.push(customer);
@@ -115,14 +133,15 @@ export function updateRestaurantAgents(agents, delta, scene) {
     if (groupArrivalTimer <= 0) {
       // Try to seat a new group if a table is free
       const groupSize = 1 + Math.floor(Math.random() * 4); // 1-4
+      const rate = (typeof window !== 'undefined' && window.footTrafficRate) ? window.footTrafficRate : 1.0;
       if (seatGroup(scene, agents, groupSize, (customer, tableId) => {
         if (typeof window !== 'undefined' && window.addSessionOrder && customer.order) {
-          window.addSessionOrder(customer.order, tableId);
+          window.addSessionOrder(customer.order, tableId, customer);
         }
       })) {
-        groupArrivalTimer = 3 + Math.random() * 4; // Next group in 3-7 seconds
+        groupArrivalTimer = (3 + Math.random() * 4) / rate; // Next group in 3-7 seconds, scaled by foot traffic
       } else {
-        groupArrivalTimer = 2; // Try again soon if no table free
+        groupArrivalTimer = 2 / rate; // Try again soon if no table free
       }
     }
   }
@@ -132,7 +151,9 @@ export function updateRestaurantAgents(agents, delta, scene) {
     // --- Movement to table ---
     if (customer.state === 'walking') {
       const mesh = customer.mesh;
-      const target = customer.target;
+      const waypoints = customer.waypoints;
+      let idx = customer.waypointIndex || 0;
+      const target = waypoints[idx];
       const dx = target.x - mesh.position.x;
       const dz = target.z - mesh.position.z;
       const dist = Math.sqrt(dx*dx + dz*dz);
@@ -143,10 +164,27 @@ export function updateRestaurantAgents(agents, delta, scene) {
       } else {
         mesh.position.x = target.x;
         mesh.position.z = target.z;
-        customer.state = 'seated';
+        if (idx < waypoints.length - 1) {
+          customer.waypointIndex = idx + 1;
+          customer.target = waypoints[idx + 1];
+        } else {
+          customer.state = 'seated';
+        }
       }
       continue; // Don't progress order/consumption until seated
     }
+    // --- Mood logic ---
+    // Very slow decay
+    customer.mood -= delta * 0.01;
+    // Exponential decay if waiting too long for food
+    if (customer.state === 'seated' && customer.orderState !== 'delivered') {
+      const wait = (Date.now() - customer.waitStartTime) / 1000;
+      if (wait > 60) { // after 60s, decay increases
+        customer.mood -= delta * 0.05 * Math.exp((wait-60)/60);
+      }
+    }
+    // Clamp mood
+    customer.mood = Math.max(0, Math.min(100, customer.mood));
     // --- Order/consumption logic (only if seated) ---
     if (customer.state === 'seated') {
       if (customer.orderState === 'placed') {
@@ -163,6 +201,26 @@ export function updateRestaurantAgents(agents, delta, scene) {
         customer.orderProgress += delta * 0.2;
         if (customer.orderProgress >= 0.75) {
           customer.orderState = 'delivered';
+          // Mood adjustment on service
+          customer.servedTime = Date.now();
+          customer.waitDuration = (customer.servedTime - customer.waitStartTime) / 1000;
+          if (customer.waitDuration < 45) {
+            customer.mood = Math.min(100, customer.mood + 10);
+            customer.serviceQuality = 'good';
+          } else if (customer.waitDuration < 90) {
+            customer.mood = Math.min(100, customer.mood + 2);
+            customer.serviceQuality = 'ok';
+          } else {
+            customer.mood = Math.max(0, customer.mood - 10);
+            customer.serviceQuality = 'bad';
+            customer.bottleneck = true;
+          }
+          // Mood-based tip logic
+          if (customer.mood >= 90) customer.tip = 5 + Math.random();
+          else if (customer.mood >= 70) customer.tip = 3 + Math.random();
+          else if (customer.mood >= 50) customer.tip = 1 + Math.random();
+          else customer.tip = 0;
+          customer.tip = Math.round(customer.tip * 100) / 100;
         }
       } else if (customer.orderState === 'delivered') {
         customer.orderProgress = 1;
@@ -170,6 +228,10 @@ export function updateRestaurantAgents(agents, delta, scene) {
           customer.consumptionProgress += delta * 0.08;
         } else {
           customer.consumptionProgress = 1;
+          if (!customer.timeFinished) {
+            customer.timeFinished = Date.now();
+            customer.consumptionTime = (customer.timeFinished - customer.servedTime) / 1000;
+          }
           // Check if all group members are done
           const group = customer.group;
           if (group && group.group && group.group.every(m => m.consumptionProgress >= 1)) {
