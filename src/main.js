@@ -8,7 +8,7 @@ import { updateAllAgents } from './assets/logic/grocery/agentController.js';
 import { getRandomItems } from './assets/logic/grocery/inventory.js';
 import { initCustomerStats, updateCustomerStats, renderStatsOverlay, enableCustomerClickStats, updateStatsCardRealtime } from './assets/gui/grocery/stats.js';
 import { INSTRUCTIONS_HTML } from './assets/gui/instructions.js';
-import { renderRestaurantStatsOverlay, setRestaurantStatsVisible } from './assets/gui/restaurant/restaurantStats.js';
+import { renderRestaurantStatsOverlay, setRestaurantStatsVisible, ensureGenerateReportButton, ensureUploadReportButton, ensureGitButton } from './assets/gui/restaurant/restaurantStats.js';
 import { getOrderTotal } from './assets/logic/restaurant/orderlogic.js';
 
 let fs;
@@ -76,6 +76,9 @@ function loadRestaurantScene() {
   workers = [];
   createRestaurantMap(scene);
   // TODO: Add restaurant stats/init logic if needed
+  ensureGenerateReportButton();
+  ensureUploadReportButton();
+  ensureGitButton();
 }
 
 function handleSceneChange(e) {
@@ -90,6 +93,9 @@ function handleSceneChange(e) {
     currentScene = 'restaurant';
     loadRestaurantScene();
   }
+  ensureGenerateReportButton();
+  ensureUploadReportButton();
+  ensureGitButton();
 }
 
 document.getElementById('scene-select').addEventListener('change', handleSceneChange);
@@ -248,7 +254,7 @@ function updateSimClock(delta) {
     speedSlider = document.createElement('input');
     speedSlider.type = 'range';
     speedSlider.min = 1;
-    speedSlider.max = 240;
+    speedSlider.max = 1000;
     speedSlider.value = simSpeed;
     speedSlider.style.position = 'fixed';
     speedSlider.style.top = '48px';
@@ -270,9 +276,9 @@ function updateSimClock(delta) {
     document.body.appendChild(label);
     speedSlider.oninput = () => {
       simSpeed = Number(speedSlider.value);
-      label.textContent = `Speed: ${simSpeed}x`;
+      label.textContent = `Speed: ${simSpeed}x (1–1000x)`;
     };
-    label.textContent = `Speed: ${simSpeed}x`;
+    label.textContent = `Speed: ${simSpeed}x (1–1000x)`;
   }
   const h = Math.floor(simTime / 3600);
   const m = Math.floor((simTime % 3600) / 60);
@@ -314,6 +320,9 @@ function animate() {
   }
   updateCameraControls(delta);
   ensureUnifiedStatsButton();
+  ensureGenerateReportButton();
+  ensureUploadReportButton();
+  ensureGitButton();
   if (currentScene === 'grocery') {
     updateAllAgents({ customers, workers }, delta, scene, now / 1000);
     customers.forEach((agent, i) => {
@@ -590,6 +599,11 @@ function downloadSessionReport() {
   let orderCounts = {};
   let tableStats = {};
   let customersInfo = [];
+  let totalTimeSeated = 0, totalWaitTime = 0, totalConsumptionTime = 0, totalTip = 0;
+  let moodBreakdown = { happy: 0, neutral: 0, frustrated: 0 };
+  let wastedOrders = 0;
+  let alerts = [];
+  let waiterStats = { count: 0, ordersHandled: 0, avgTimePerTable: 0 };
   for (const entry of sessionOrders) {
     const { order, tableId, customerInfo } = entry;
     if (!tableStats[tableId]) tableStats[tableId] = { revenue: 0, orders: [], customers: 0 };
@@ -629,6 +643,29 @@ function downloadSessionReport() {
       }
     }
   }
+  // Aggregate customer stats
+  for (const c of customersInfo) {
+    if (c.timeSeated && c.timeFinished) totalTimeSeated += (c.timeFinished - c.timeSeated) / 1000;
+    if (c.waitDuration && c.waitDuration !== 'pending') totalWaitTime += c.waitDuration;
+    if (c.consumptionTime) totalConsumptionTime += c.consumptionTime;
+    if (typeof c.tip === 'number') totalTip += c.tip;
+    if (c.mood >= 80) moodBreakdown.happy++;
+    else if (c.mood >= 50) moodBreakdown.neutral++;
+    else moodBreakdown.frustrated++;
+    if (c.bottleneck) alerts.push(`Table ${c.table} had a delayed delivery (Customer #${c.id})`);
+    if (c.consumptionTime && c.consumptionTime < 60) wastedOrders++;
+  }
+  const avgTimeSeated = customersInfo.length ? Math.round(totalTimeSeated / customersInfo.length) : 0;
+  const avgWaitTime = customersInfo.length ? Math.round(totalWaitTime / customersInfo.length) : 0;
+  const avgConsumptionTime = customersInfo.length ? Math.round(totalConsumptionTime / customersInfo.length) : 0;
+  const avgTip = customersInfo.length ? Math.round((totalTip / customersInfo.length) * 100) / 100 : 0;
+  // Worker stats (waiters)
+  if (restaurantWorkers && restaurantWorkers.length) {
+    const waiters = restaurantWorkers.filter(w => w.role === 'waiter');
+    waiterStats.count = waiters.length;
+    waiterStats.ordersHandled = Math.round(totalCustomers / (waiters.length || 1));
+    waiterStats.avgTimePerTable = avgTimeSeated;
+  }
   const totalTables = TABLE_POSITIONS.length;
   const occupiedTables = TABLE_STATE.filter(t => t.occupied).length;
   const percentFull = totalTables > 0 ? Math.round((occupiedTables / totalTables) * 100) : 0;
@@ -639,6 +676,18 @@ function downloadSessionReport() {
     orderCounts,
     tableStats,
     customers: customersInfo,
+    avgTimeSeated,
+    avgWaitTime,
+    avgConsumptionTime,
+    avgTip,
+    moodBreakdown,
+    wastedOrders,
+    workerStats: {
+      waiters: waiterStats.count,
+      avgOrdersHandled: waiterStats.ordersHandled,
+      avgTimePerTable: waiterStats.avgTimePerTable
+    },
+    alerts,
     capacity: {
       totalTables,
       occupiedTables,
@@ -667,27 +716,27 @@ function addFootTrafficSlider() {
     sliderDiv = document.createElement('div');
     sliderDiv.id = 'foot-traffic-slider-div';
     sliderDiv.style.position = 'fixed';
-    sliderDiv.style.top = '92px';
-    sliderDiv.style.left = '12px';
+    sliderDiv.style.top = '10px';
+    sliderDiv.style.left = '260px';
     sliderDiv.style.zIndex = 2000;
     sliderDiv.style.background = 'rgba(255,255,255,0.92)';
-    sliderDiv.style.padding = '8px 16px 10px 16px';
+    sliderDiv.style.padding = '4px 12px 4px 12px';
     sliderDiv.style.borderRadius = '8px';
     sliderDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.10)';
-    sliderDiv.style.display = 'flex';
+    sliderDiv.style.display = 'inline-flex';
     sliderDiv.style.alignItems = 'center';
     sliderDiv.style.gap = '10px';
     sliderDiv.innerHTML = `
       <label for="foot-traffic-slider" style="font-size:1em;color:#222;">Foot Traffic:</label>
-      <input type="range" id="foot-traffic-slider" min="0.2" max="2.0" step="0.01" value="1.0" style="width:120px;">
-      <span id="foot-traffic-value" style="font-size:1em;color:#1976d2;">1.0x</span>
+      <input type="range" id="foot-traffic-slider" min="0.2" max="5.0" step="0.01" value="1.0" style="width:120px;">
+      <span id="foot-traffic-value" style="font-size:1em;color:#1976d2;">1.0x (0.2–5x)</span>
     `;
     document.body.appendChild(sliderDiv);
     const slider = document.getElementById('foot-traffic-slider');
     const valueSpan = document.getElementById('foot-traffic-value');
     slider.addEventListener('input', () => {
       window.footTrafficRate = parseFloat(slider.value);
-      valueSpan.textContent = slider.value + 'x';
+      valueSpan.textContent = slider.value + 'x (0.2–5x)';
     });
     window.footTrafficRate = parseFloat(slider.value);
   }
