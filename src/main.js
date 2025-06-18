@@ -282,8 +282,19 @@ function updateSimClock(delta) {
 // --- Session Orders Tracking ---
 let sessionOrders = [];
 function resetSessionOrders() { sessionOrders = []; }
-function addSessionOrder(order, tableId) {
-  sessionOrders.push({ order, tableId });
+function addSessionOrder(order, tableId, customer) {
+  let customerInfo = undefined;
+  if (customer) {
+    customerInfo = {
+      id: customer.mesh && customer.mesh.id,
+      table: tableId,
+      order: customer.order,
+      mood: Math.round(customer.mood),
+      waitDuration: customer.waitDuration == null ? 'pending' : customer.waitDuration,
+      serviceQuality: customer.serviceQuality == null ? 'pending' : customer.serviceQuality
+    };
+  }
+  sessionOrders.push({ order, tableId, customerInfo });
 }
 
 function animate() {
@@ -332,8 +343,14 @@ function animate() {
     let totalCustomers = 0;
     let orderCounts = {};
     let tableStats = {};
+    let customersInfo = [];
+    let totalTimeSeated = 0, totalWaitTime = 0, totalConsumptionTime = 0, totalTip = 0;
+    let moodBreakdown = { happy: 0, neutral: 0, frustrated: 0 };
+    let wastedOrders = 0;
+    let alerts = [];
+    let waiterStats = { count: 0, ordersHandled: 0, totalTimePerTable: 0 };
     for (const entry of sessionOrders) {
-      const { order, tableId } = entry;
+      const { order, tableId, customerInfo } = entry;
       if (!tableStats[tableId]) tableStats[tableId] = { revenue: 0, orders: [], customers: 0 };
       const orderTotal = getOrderTotal(order);
       tableStats[tableId].revenue += orderTotal;
@@ -344,6 +361,56 @@ function animate() {
       for (const item of order) {
         orderCounts[item] = (orderCounts[item] || 0) + 1;
       }
+      if (customerInfo) customersInfo.push({
+        ...customerInfo,
+        waitDuration: customerInfo.waitDuration == null ? 'pending' : customerInfo.waitDuration,
+        serviceQuality: customerInfo.serviceQuality == null ? 'pending' : customerInfo.serviceQuality
+      });
+    }
+    // Add any remaining customers (in case not all are in sessionOrders)
+    if (restaurantCustomers && restaurantCustomers.length) {
+      for (const c of restaurantCustomers) {
+        if (!customersInfo.find(ci => ci.id === c.mesh.id)) {
+          customersInfo.push({
+            id: c.mesh.id,
+            table: c.table && c.table.id,
+            order: c.order,
+            mood: Math.round(c.mood),
+            waitDuration: c.waitDuration == null ? 'pending' : c.waitDuration,
+            serviceQuality: c.serviceQuality == null ? 'pending' : c.serviceQuality,
+            tip: c.tip,
+            timeSeated: c.timeSeated,
+            servedTime: c.servedTime,
+            timeFinished: c.timeFinished,
+            consumptionTime: c.consumptionTime,
+            bottleneck: c.bottleneck
+          });
+        }
+      }
+    }
+    // Aggregate customer stats
+    for (const c of customersInfo) {
+      if (c.timeSeated && c.timeFinished) totalTimeSeated += (c.timeFinished - c.timeSeated) / 1000;
+      if (c.waitDuration) totalWaitTime += c.waitDuration;
+      if (c.consumptionTime) totalConsumptionTime += c.consumptionTime;
+      if (typeof c.tip === 'number') totalTip += c.tip;
+      if (c.mood >= 80) moodBreakdown.happy++;
+      else if (c.mood >= 50) moodBreakdown.neutral++;
+      else moodBreakdown.frustrated++;
+      if (c.bottleneck) alerts.push(`Table ${c.table} had a delayed delivery (Customer #${c.id})`);
+      if (c.consumptionTime && c.consumptionTime < 60) wastedOrders++;
+    }
+    const avgTimeSeated = customersInfo.length ? Math.round(totalTimeSeated / customersInfo.length) : 0;
+    const avgWaitTime = customersInfo.length ? Math.round(totalWaitTime / customersInfo.length) : 0;
+    const avgConsumptionTime = customersInfo.length ? Math.round(totalConsumptionTime / customersInfo.length) : 0;
+    const avgTip = customersInfo.length ? Math.round((totalTip / customersInfo.length) * 100) / 100 : 0;
+    // Worker stats (waiters)
+    if (restaurantWorkers && restaurantWorkers.length) {
+      const waiters = restaurantWorkers.filter(w => w.role === 'waiter');
+      waiterStats.count = waiters.length;
+      // For demo, estimate orders handled and time per table
+      waiterStats.ordersHandled = Math.round(totalCustomers / (waiters.length || 1));
+      waiterStats.avgTimePerTable = avgTimeSeated;
     }
     const totalTables = TABLE_POSITIONS.length;
     const occupiedTables = TABLE_STATE.filter(t => t.occupied).length;
@@ -354,6 +421,19 @@ function animate() {
       totalCustomers,
       orderCounts,
       tableStats,
+      customers: customersInfo,
+      avgTimeSeated,
+      avgWaitTime,
+      avgConsumptionTime,
+      avgTip,
+      moodBreakdown,
+      wastedOrders,
+      workerStats: {
+        waiters: waiterStats.count,
+        avgOrdersHandled: waiterStats.ordersHandled,
+        avgTimePerTable: waiterStats.avgTimePerTable
+      },
+      alerts,
       capacity: {
         totalTables,
         occupiedTables,
@@ -400,8 +480,9 @@ function showTitleAndInfo() {
   titleDiv.id = 'gsim-title';
   titleDiv.style.position = 'fixed';
   titleDiv.style.top = '18px';
-  titleDiv.style.left = '50%';
-  titleDiv.style.transform = 'translateX(-50%)';
+  titleDiv.style.right = '160px'; // Move to the right, leave space for Show Stats button
+  titleDiv.style.left = '';
+  titleDiv.style.transform = '';
   titleDiv.style.fontFamily = 'system-ui,sans-serif';
   titleDiv.style.fontSize = '2.1em';
   titleDiv.style.fontWeight = 'bold';
@@ -508,8 +589,9 @@ function downloadSessionReport() {
   let totalCustomers = 0;
   let orderCounts = {};
   let tableStats = {};
+  let customersInfo = [];
   for (const entry of sessionOrders) {
-    const { order, tableId } = entry;
+    const { order, tableId, customerInfo } = entry;
     if (!tableStats[tableId]) tableStats[tableId] = { revenue: 0, orders: [], customers: 0 };
     const orderTotal = getOrderTotal(order);
     tableStats[tableId].revenue += orderTotal;
@@ -519,6 +601,32 @@ function downloadSessionReport() {
     totalCustomers++;
     for (const item of order) {
       orderCounts[item] = (orderCounts[item] || 0) + 1;
+    }
+    if (customerInfo) customersInfo.push({
+      ...customerInfo,
+      waitDuration: customerInfo.waitDuration == null ? 'pending' : customerInfo.waitDuration,
+      serviceQuality: customerInfo.serviceQuality == null ? 'pending' : customerInfo.serviceQuality
+    });
+  }
+  // Add any remaining customers (in case not all are in sessionOrders)
+  if (restaurantCustomers && restaurantCustomers.length) {
+    for (const c of restaurantCustomers) {
+      if (!customersInfo.find(ci => ci.id === c.mesh.id)) {
+        customersInfo.push({
+          id: c.mesh.id,
+          table: c.table && c.table.id,
+          order: c.order,
+          mood: Math.round(c.mood),
+          waitDuration: c.waitDuration == null ? 'pending' : c.waitDuration,
+          serviceQuality: c.serviceQuality == null ? 'pending' : c.serviceQuality,
+          tip: c.tip,
+          timeSeated: c.timeSeated,
+          servedTime: c.servedTime,
+          timeFinished: c.timeFinished,
+          consumptionTime: c.consumptionTime,
+          bottleneck: c.bottleneck
+        });
+      }
     }
   }
   const totalTables = TABLE_POSITIONS.length;
@@ -530,6 +638,7 @@ function downloadSessionReport() {
     totalCustomers,
     orderCounts,
     tableStats,
+    customers: customersInfo,
     capacity: {
       totalTables,
       occupiedTables,
@@ -550,3 +659,37 @@ function downloadSessionReport() {
 }
 
 window.addSessionOrder = addSessionOrder;
+
+// Add Foot Traffic slider below Download Report button
+function addFootTrafficSlider() {
+  let sliderDiv = document.getElementById('foot-traffic-slider-div');
+  if (!sliderDiv) {
+    sliderDiv = document.createElement('div');
+    sliderDiv.id = 'foot-traffic-slider-div';
+    sliderDiv.style.position = 'fixed';
+    sliderDiv.style.top = '92px';
+    sliderDiv.style.left = '12px';
+    sliderDiv.style.zIndex = 2000;
+    sliderDiv.style.background = 'rgba(255,255,255,0.92)';
+    sliderDiv.style.padding = '8px 16px 10px 16px';
+    sliderDiv.style.borderRadius = '8px';
+    sliderDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.10)';
+    sliderDiv.style.display = 'flex';
+    sliderDiv.style.alignItems = 'center';
+    sliderDiv.style.gap = '10px';
+    sliderDiv.innerHTML = `
+      <label for="foot-traffic-slider" style="font-size:1em;color:#222;">Foot Traffic:</label>
+      <input type="range" id="foot-traffic-slider" min="0.2" max="2.0" step="0.01" value="1.0" style="width:120px;">
+      <span id="foot-traffic-value" style="font-size:1em;color:#1976d2;">1.0x</span>
+    `;
+    document.body.appendChild(sliderDiv);
+    const slider = document.getElementById('foot-traffic-slider');
+    const valueSpan = document.getElementById('foot-traffic-value');
+    slider.addEventListener('input', () => {
+      window.footTrafficRate = parseFloat(slider.value);
+      valueSpan.textContent = slider.value + 'x';
+    });
+    window.footTrafficRate = parseFloat(slider.value);
+  }
+}
+addFootTrafficSlider();
