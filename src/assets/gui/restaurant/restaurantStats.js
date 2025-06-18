@@ -131,14 +131,17 @@ export function ensureUploadReportButton() {
         reader.onload = (evt) => {
           try {
             const data = JSON.parse(evt.target.result);
+            // Always show the panel first, then render the chart with uploaded data
+            if (typeof showRestaurantChartsPanel === 'function') showRestaurantChartsPanel();
+            // Clear previous chart content
+            const chartsContent = document.getElementById('restaurant-charts-content');
+            if (chartsContent) chartsContent.innerHTML = '';
             // Pass to charts module
             import('./restaurantcharts.js').then(mod => {
               if (mod && mod.renderRestaurantCharts) {
                 mod.renderRestaurantCharts('restaurant-charts-content', data);
               }
             });
-            // Show the panel if not visible
-            if (typeof showRestaurantChartsPanel === 'function') showRestaurantChartsPanel();
           } catch (err) {
             alert('Invalid JSON file.');
           }
