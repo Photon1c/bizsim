@@ -4,7 +4,7 @@ A Three.js-powered business operations simulator featuring a restaurant and a gr
 
 This project is version 2 of [Grocery Store Sim](https://github.com/Photon1c/grocerystoresim)
 
-Check back later once the final debugged version is up and running. 
+Check back later once the final debugged version is up and running. 🚧👷
 
 Current progress:
 
